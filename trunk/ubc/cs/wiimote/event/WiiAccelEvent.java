@@ -26,13 +26,15 @@ import ca.ubc.cs.wiimote.Wiimote;
  */
 public class WiiAccelEvent extends WiiEvent {
 	
+	public enum Source {Wiimote, Nunchuk};
 	/**
 	 * Store the magnitudes of the acceleration values in the three axes.
 	 */
 	public double x, y, z;
+	public Source source;
 	
-	public WiiAccelEvent(Wiimote source, double _x, double _y, double _z) {
-		super(source);
+	public WiiAccelEvent(Wiimote s, double _x, double _y, double _z) {
+		super(s);
 		x = _x;
 		y = _y;
 		z = _z;

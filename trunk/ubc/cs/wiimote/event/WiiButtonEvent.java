@@ -25,56 +25,26 @@ import ca.ubc.cs.wiimote.Wiimote;
  * Represents a wii button event. Not that not all buttons have been implemented (only A, B, 1 and 2).
  */
 public class WiiButtonEvent extends WiiEvent {
-	final static public int BUTTON_A = 8;
-	final static public int BUTTON_B = 4;
-	final static public int BUTTON_1 = 2;
-	final static public int BUTTON_2 = 1;
+	public enum Button {B_A, B_B, B_1, B_2, B_C, B_Z};
 	
-	protected int pressedButtons;
+	protected Button button;
+	protected boolean pressedEvent;
 	
-	public WiiButtonEvent(Wiimote w, int buttonFlags) {
+	public WiiButtonEvent(Wiimote w, Button b, boolean pE) {
 		super(w);
-		pressedButtons = buttonFlags;
+		button = b;
+		pressedEvent = pE;
 	}
 
-	/**
-	 * Returns true if the button state of the given event are identical to the button states of this event.
-	 */
-	public boolean equals(WiiButtonEvent e) {
-		if (e==null)
-			return false;
-		return (isAPressed()==e.isAPressed() && isBPressed()==e.isBPressed() && is1Pressed()==e.is1Pressed() && is2Pressed()==e.is2Pressed());
+	public Button getButton() {
+		return button;
 	}
 	
-	/**
-	 * Returns true if the A button was down when this event was created
-	 */
-	public boolean isAPressed() {
-		return ((pressedButtons & BUTTON_A) != 0);
-	}
-
-	/**
-	 * Returns true if the B button was down when this event was created
-	 */
-	public boolean isBPressed() {
-		return ((pressedButtons & BUTTON_B) != 0);		
-	}
-
-	/**
-	 * Returns true if the 1 button was down when this event was created
-	 */
-	public boolean is1Pressed() {
-		return ((pressedButtons & BUTTON_1) != 0);
-	}
-
-	/**
-	 * Returns true if the 2 button was down when this event was created
-	 */
-	public boolean is2Pressed() {
-		return ((pressedButtons & BUTTON_2) != 0);		
+	public boolean getWasPress() {
+		return pressedEvent;
 	}
 	
 	public String toString() {
-		return new String("WiiButtonEvent [A: "+isAPressed()+" B: "+isBPressed()+" 1: "+is1Pressed()+" 2: "+is2Pressed()+"]");
+		return new String("WiiButtonEvent");
 	}
 }
