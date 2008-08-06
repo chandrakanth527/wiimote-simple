@@ -170,8 +170,8 @@ public class WiimoteDiscoverer extends Thread implements DiscoveryListener{
 	public void deviceDiscovered(RemoteDevice remotedevice, DeviceClass deviceclass) {
 		String name = null;
 		try {
-			name = remotedevice.getFriendlyName(true);
-		
+			//name = remotedevice.getFriendlyName(true);
+			name = "Nintendo RVL-CNT-01";
 			System.out.print("Discovered " + name);
 		}
 		catch (Exception e) {System.out.println(e);}
@@ -179,10 +179,9 @@ public class WiimoteDiscoverer extends Thread implements DiscoveryListener{
 		//if this isn't named correctly then it isn't a wiimote.
 		//we will return and wait until we find a wiimote
 		if (!name.equals("Nintendo RVL-CNT-01")) {
-			System.out.println();
 			return;
 		}
-		
+				
 		//it is a wiimote, so we will get it's address
 		String address = remotedevice.getBluetoothAddress();
 		System.out.print(" " + address+". ");

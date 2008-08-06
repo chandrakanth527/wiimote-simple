@@ -25,12 +25,17 @@ package ca.ubc.cs.wiimote.event;
  */
 public interface WiimoteListener {
 	
-	///Is called to notify the listener of button events. Only gets called when button state changes.
-	public void wiiButtonChange(WiiButtonEvent e);
-	
+	public void wiiButtonPress(WiiButtonEvent e);
+
+	public void wiiButtonRelease(WiiButtonEvent e);
+
 	///Is called to notify the listener of IR events. Is called continuously as long as at least one IR source is visible to the wiimote.
 	public void wiiIRInput(WiiIREvent e);
 	
 	///Is called to notify the listener of acceleration events. Is called continuously.
 	public void wiiAccelInput(WiiAccelEvent e);
+
+	public void wiiNunchukAccelInput(WiiAccelEvent e);
+	
+	public void wiiNunchukJoystickInput(WiiNunchukJoystickEvent e);
 }

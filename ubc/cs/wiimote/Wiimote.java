@@ -38,6 +38,9 @@ public class Wiimote {
 	
 	String address;
 	
+	final public static double fov_y = 31.0;
+	final public static double fov_x = 41.0;
+	
 	protected LinkedList<WiimoteListener> listeners;
 	
     protected L2CAPConnection sendCon;
@@ -59,12 +62,15 @@ public class Wiimote {
 	static Object gate = new Object();
 	boolean inited = false;
 	
+	boolean button_A_state, button_B_state, button_1_state, button_2_state, button_Z_state, button_C_state;
+	
 	/**
 	 * Creates a Wiimote instance given an address. Forms connections to the wiimote, and
 	 * readies sending and receiving of data. You likely won't call this yourself. Instead,
 	 * your Wiimote instances will be created by WiimoteDiscoverer
 	 */
 	public Wiimote(String a) throws Exception {
+		button_A_state = button_B_state = button_1_state = button_2_state = button_Z_state = button_C_state = false; // not pressed
 		connectionOpen = false;
 		calibrationZero = new double[3];
 		calibrationOne = new double[3];
@@ -116,23 +122,44 @@ public class Wiimote {
 	protected void dispatchEvent(WiiEvent e) {
 		for (ListIterator<WiimoteListener> it = listeners.listIterator(); it.hasNext();) {
 			WiimoteListener listener = it.next();
-			if (e instanceof WiiButtonEvent)
-				listener.wiiButtonChange((WiiButtonEvent)e);
+			if (e instanceof WiiButtonEvent) {
+				if (((WiiButtonEvent)e).getWasPress())
+					listener.wiiButtonPress((WiiButtonEvent)e);
+				else
+					listener.wiiButtonRelease((WiiButtonEvent)e);
+			}
 			if (e instanceof WiiIREvent)
 				listener.wiiIRInput((WiiIREvent)e);
 			if (e instanceof WiiAccelEvent)
-				listener.wiiAccelInput((WiiAccelEvent)e);
+				if (((WiiAccelEvent)e).source == WiiAccelEvent.Source.Wiimote)
+					listener.wiiAccelInput((WiiAccelEvent)e);
+				else if (((WiiAccelEvent)e).source == WiiAccelEvent.Source.Nunchuk)
+					listener.wiiNunchukAccelInput((WiiAccelEvent)e);	
+			if (e instanceof WiiNunchukJoystickEvent)
+				listener.wiiNunchukJoystickInput((WiiNunchukJoystickEvent)e);
 		}
 	}
 	
 	/**
 	 * sends the necessary commands to the wiimote to enable IR events
 	 */
+	//http://wiibrew.org/index.php?title=Wiimote#Memory_and_Registers
 	public void enableIREvents() {
 		sendCommand(COMMAND_REPORTING, new byte[] {0x04, 0x33});
-		
-		//http://wiibrew.org/index.php?title=Wiimote#Memory_and_Registers
-		
+		initWiimote();
+	}
+
+	/**
+	 * sends the necessary commands to the wiimote to enable Extension events
+	 */
+	public void enableExtensionEvents() {
+		sendCommand(COMMAND_REPORTING, new byte[] {0x04, 0x37});
+		initWiimote();
+		//init encryption
+		writeToRegister(0xa40040, new byte[] {0x00});
+	}
+	
+	private void initWiimote() {
 		try {
 			sendCommand(COMMAND_IR, new byte[] {0x04});
 			Thread.sleep(100);
@@ -151,10 +178,10 @@ public class Wiimote {
 			writeToRegister(0xb00033, new byte[] {(byte)3});
 			Thread.sleep(100);
 			writeToRegister(0xb00030, new byte[] {0x08});
-		} catch (Exception e) {System.out.println("enableIREvents exception: " + e);}
+		} catch (Exception e) {e.printStackTrace();}
 
 	}
-    
+	
 	/**
 	 * Not yet implemented
 	 */
@@ -224,7 +251,8 @@ public class Wiimote {
 			byte[] message = new byte[] {0x00, 0x00, 0x00, 0x16, 0x00, 0x08};
 			sendCommand(COMMAND_READ_CALIBRATION, message);
 		} catch (Exception e) {
-			System.out.println("readCalibration exception: " + e);
+			System.out.println("readCalibration exception: ");
+			e.printStackTrace();
 		}
 	}
 
@@ -241,7 +269,8 @@ public class Wiimote {
 			sendCon.send(message);
 		}
 		catch(IOException ioexception) {
-			System.out.println("error sending data " + ioexception);
+			ioexception.printStackTrace();
+			//System.out.println("error sending data " + ioexception);
 		}
 	}
 	
@@ -294,10 +323,16 @@ public class Wiimote {
 						case 0x30: //buttons only
 							createButtonEvent(ByteBuffer.allocate(2).put(bytes, 2, 2));
 							break;
-						case 0x33: //buttons -> accel -> IR
+						case 0x33: //2 buttons -> 3 accel -> 12 IR
 							createButtonEvent(ByteBuffer.allocate(2).put(bytes, 2, 2));
-							createAccelEvent(ByteBuffer.allocate(5).put(bytes, 2, 5));
+							createWiimoteAccelEvent(ByteBuffer.allocate(5).put(bytes, 2, 5));
 							createIREvent(ByteBuffer.allocate(12).put(bytes, 7, 12));
+							break;
+						case 0x37: //2 buttons + 3 accel + 10 IR + 6 Extension
+							createButtonEvent(ByteBuffer.allocate(2).put(bytes, 2, 2));
+							createWiimoteAccelEvent(ByteBuffer.allocate(5).put(bytes, 2, 5));
+							//IR not implemented yet
+							createExtensionEvent(ByteBuffer.allocate(6).put(bytes, 17, 6));
 							break;
 						}
 					} else {
@@ -325,11 +360,26 @@ public class Wiimote {
 		/**
 		 * Creates a WiiButtonEvent from raw data
 		 */
-		protected void createButtonEvent(ByteBuffer b) {			
+		protected void createButtonEvent(ByteBuffer b) {
 			int i = (b.get(0) << 8) | b.get(1);
-			WiiButtonEvent event = new WiiButtonEvent(wiimote, i);
-			if (!event.equals(lastButtonEvent)) {
-				lastButtonEvent = event;
+			if (((i & 8)!=0)!=button_A_state) {
+				button_A_state = !button_A_state;
+				WiiButtonEvent event = new WiiButtonEvent(wiimote, WiiButtonEvent.Button.B_A, button_A_state);
+				wiimote.dispatchEvent(event);
+			}
+			if (((i & 4)!=0)!=button_B_state) {
+				button_B_state = !button_B_state;
+				WiiButtonEvent event = new WiiButtonEvent(wiimote, WiiButtonEvent.Button.B_B, button_B_state);
+				wiimote.dispatchEvent(event);
+			}
+			if (((i & 2)!=0)!=button_1_state) {
+				button_1_state = !button_1_state;
+				WiiButtonEvent event = new WiiButtonEvent(wiimote, WiiButtonEvent.Button.B_1, button_1_state);
+				wiimote.dispatchEvent(event);
+			}
+			if (((i & 1)!=0)!=button_2_state) {
+				button_2_state = !button_2_state;
+				WiiButtonEvent event = new WiiButtonEvent(wiimote, WiiButtonEvent.Button.B_2, button_2_state);
 				wiimote.dispatchEvent(event);
 			}
 		}
@@ -337,7 +387,13 @@ public class Wiimote {
 		/**
 		 * Creates a WiiAccelEvent from raw data
 		 */
-		protected void createAccelEvent(ByteBuffer b) {
+		protected void createWiimoteAccelEvent(ByteBuffer b) {
+			WiiAccelEvent event = createGenericAccelEvent(b);
+			event.source = WiiAccelEvent.Source.Wiimote;
+			wiimote.dispatchEvent(event);
+		}
+		
+		protected WiiAccelEvent createGenericAccelEvent(ByteBuffer b) {
 			int x = ((b.get(2) & 0xff) << 2) + ((b.get(0) & 0x60) >> 5);
 			int y = ((b.get(3) & 0xff) << 2) + ((b.get(1) & 0x60) >> 5);
 			int z = ((b.get(4) & 0xff) << 2) + ((b.get(1) & 0x80) >> 6);
@@ -346,8 +402,7 @@ public class Wiimote {
 			double yaccel = ((double)y-calibrationZero[1])/(calibrationOne[1]-calibrationZero[1]);
 			double zaccel = ((double)z-calibrationZero[2])/(calibrationOne[2]-calibrationZero[2]);
 		
-			WiiAccelEvent event = new WiiAccelEvent(wiimote, xaccel, yaccel, zaccel);
-			wiimote.dispatchEvent(event);
+			return new WiiAccelEvent(wiimote, xaccel, yaccel, zaccel);
 		}
 		
 		/**
@@ -363,6 +418,33 @@ public class Wiimote {
 					wiimote.dispatchEvent(event);
 				}
 			}
+		}
+		
+		protected void createExtensionEvent(ByteBuffer b) {
+			for (int i=0; i<b.capacity(); i++) {
+				b.put(i, (byte)((b.get(i)^0x17) + 0x17));
+			}
+			createNunchukAccelEvent(b);
+			WiiNunchukJoystickEvent je = new WiiNunchukJoystickEvent(wiimote, (b.get(0) & 0xFF) - 130, (b.get(1) & 0xFF) - 130);
+			wiimote.dispatchEvent(je);
+			//detects Z button state change
+			if (((b.get(5) & 0x01) == 0) != button_Z_state) {
+				button_Z_state = !button_Z_state;
+				WiiButtonEvent event = new WiiButtonEvent(wiimote, WiiButtonEvent.Button.B_Z, button_Z_state);
+				wiimote.dispatchEvent(event);
+			}
+			//detects C button state change
+			if (((b.get(5) & 0x02) == 0) != button_C_state) {
+				button_C_state = !button_C_state;
+				WiiButtonEvent event = new WiiButtonEvent(wiimote, WiiButtonEvent.Button.B_C, button_C_state);
+				wiimote.dispatchEvent(event);
+			}
+		}
+		
+		protected void createNunchukAccelEvent(ByteBuffer b) {
+			WiiAccelEvent event = createGenericAccelEvent(b);
+			event.source = WiiAccelEvent.Source.Nunchuk;
+			wiimote.dispatchEvent(event);
 		}
 	}
 }
